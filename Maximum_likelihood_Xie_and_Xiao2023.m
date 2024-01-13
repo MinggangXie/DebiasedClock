@@ -1,4 +1,4 @@
-function [fitresult,fitresult_referenceTarget]=Maximum_likelihood_Xie2023(diam_km,Dmin_fit,Area,target_type,isDegradation,DL_fit)
+function [fitresult,fitresult_referenceTarget]=Maximum_likelihood_Xie_and_Xiao2023(diam_km,Dmin_fit,Area,target_type,isDegradation,DL_fit)
 %Xie and Xiao, 2023, https://doi.org/10.1016/j.epsl.2022.117963
 if exist('diam_km','var')&&isstruct(diam_km)
     N_cum=diam_km.N_cum;
@@ -34,6 +34,13 @@ if nargin<1
         [D_sort,index]=sort(diam_km);
         N_cum=data(index,2)';
         Area = str2num(cell2mat(inputdlg('Area of the unit (km^{-2})')));
+        dnum=(N_cum-[N_cum(2:end),0])*Area;
+    elseif strcmp(filename(end-2:end),'dbf')%Robbins global dataset; has to be unbinned CSFD
+        [NUM,TXT,RAW]=xlsread([PATHNAME filename]);
+        diam_km=NUM(:,3)';
+        [D_sort,index]=sort(diam_km);
+        Area = str2num(cell2mat(inputdlg('Area of the unit (km^{2})')));
+        N_cum=(length(D_sort):-1:1)/Area;
         dnum=(N_cum-[N_cum(2:end),0])*Area;
     else
         [diam_km,~,~,Area]=readdiam([PATHNAME filename]);
@@ -140,7 +147,7 @@ for i=1:L
         if num_used_craters==num_cum_max_round%has to be unbinned CSFD
             n_bar=(C-CMPF_TDE(end))*Area;
             P_log(i)=-n_bar+sum(log(DSFD));
-        else% may be problematic£¡£¡£¡
+        else% may be problematicï¼ï¼ï¼
             n_bar=(C-CMPF_TDE(end))*Area;
             P_log(i)=-n_bar+sum(log(DSFD).*dnum(index_used_craters));
             %                 DSFD=DSFD*num_used_craters/num_cum_max;
@@ -231,15 +238,26 @@ if nargin<1
     h(end+1:end+3)=loglog(DL_fit(DL_fit>=Dmin_fit),CMPF_TD_best_fit(DL_fit>=Dmin_fit),'k',DL_fit_EPF,CEPF_best_fit,'k--',DL_fit,CMPF_T_best_fit,'r-.','LineWidth',2);hold on
     [DL,cumN]=NPF(N1_mopf_fit);
     h(end+1)=loglog(DL,cumN,'g--','LineWidth',1.5);
-    str_leg={'measured SFD',['Bestfit  CMPF_{TD}' target_type],'MPF_{TDE}',sprintf('Bestfit  CMPF_{T} = %g_{-%g}^{+%g} km^{-2}',N1_mpf_fit,N1_mpf_fit-N1_mpf_err_neg,N1_mpf_err_pos-N1_mpf_fit),'NPF'};
+    
+    if strcmp(target_type,'pure_regolith')
+        str_target='pure regolith';
+    elseif strcmp(target_type,'regolith_on_megaregolith_on_rocks')
+        str_target='megaregolith on bedrock';
+    elseif strcmp(target_type,'regolith_on_rocks')
+        str_target='regolith on bedrock';
+    end
+    str_leg={'measured SFD',['CMPF_{TD} (' str_target ')'],'Bestfit CMPF_{TDE}',sprintf('CMPF_{T} = %.2g_{-%.2g}^{+%.2g} km^{-2}',N1_mpf_fit,N1_mpf_fit-N1_mpf_err_neg,N1_mpf_err_pos-N1_mpf_fit),'NPF'};
     title(filename(1:end-4));
     
+    FontSize=15;
+    xlabel('Crater diameter (km)','FontSize',FontSize,'FontName','Times New Roman')
+    ylabel('Cumulative crater density (km^{-2})','FontSize',FontSize,'FontName','Times New Roman')
     %--------------------------------------inset-------------------------------------------------
     h_inset=axes('Position',[0.15,0.25,0.35,0.25]);
     index=PDF>0.01*max(PDF);
     plot(h_inset,dataset.N1_mpf(index),PDF(index));
-    set(h_inset,'Xscale','log','box','off','ytick',[],'ycolor','w');
-    xlabel('Crater density (km^{-2})')
+    set(h_inset,'Xscale','log','box','off','ytick',[],'ycolor','w','FontSize',FontSize*0.5);
+    xlabel('Crater density (km^{-2})','FontSize',FontSize*0.7,'FontName','Times New Roman')
     %---------------------------------------------------------------------------------------
     %     plot(N_Dmin_fit(index),PDF(index))
 end
@@ -295,7 +313,10 @@ if nargout==2||nargin<1
     if nargin<1
         h(end+1)=loglog(h_axes,DL_fit,CMPF_T_best_fit,'b:','LineWidth',2);hold on
         
-        str_leg={str_leg{:},sprintf('Reference CMPF_{T} with density = %g_{-%g}^{+%g} km^{-2}',N1_mpf_fit,N1_mpf_fit-N1_mpf_err_neg,N1_mpf_err_pos-N1_mpf_fit)};
+        age=debiased_density2age(N1_mpf_fit);
+        str_age=sprintf('%.2g',round(age,3,'significant'));
+        str_leg={str_leg{:},sprintf('Reference CMPF_{T} with debiased N(1) = %.2g_{-%.2g}^{+%.2g} km^{-2} \n and AMA = %.3g_{-%.2g}^{+%.2g} Ga',N1_mpf_fit,N1_mpf_fit-N1_mpf_err_neg,N1_mpf_err_pos-N1_mpf_fit,...
+        debiased_density2age(N1_mpf_fit),debiased_density2age(N1_mpf_fit)-debiased_density2age(N1_mpf_err_neg),debiased_density2age(N1_mpf_err_pos)-debiased_density2age(N1_mpf_fit))};
         legend(h,str_leg);
         
         
@@ -435,7 +456,7 @@ for i=1:length(MOPF_isfd)
     index=find(D(i)-4*sigma(i)<edf_D*step&edf_D<=D(i)+4*sigma(i));
     y=1/(sqrt(2*pi)*sigma(i))*exp(-0.5*((edf_D(index)-D(i))/sigma(i)).^2);
     %     y=y/sum(y.*bin_width(index))*MOPF_isfd(i);%
-    y=y*MOPF_isfd(i);%²»ÄÜÍ¨¹ý³ýÒÔsum(y.*bin_width(index))À´¹éÒ»»¯£¬ÒòÎªÓÐ¿ÉÄÜÄ³Ð©Çé¿öÊÇÔÚºá×ø±ê·¶Î§ÍâµÄ£¬±ÈÈçL=0.1,¶øÒ»¸ö0.1Ö±¾¶µÄ×²»÷¿Ó£¬ÓÐÒ»°ë¸ÅÂÊÊÇÐ¡ÓÚLµÄ
+    y=y*MOPF_isfd(i);%ä¸èƒ½é€šè¿‡é™¤ä»¥sum(y.*bin_width(index))æ¥å½’ä¸€åŒ–ï¼Œå› ä¸ºæœ‰å¯èƒ½æŸäº›æƒ…å†µæ˜¯åœ¨æ¨ªåæ ‡èŒƒå›´å¤–çš„ï¼Œæ¯”å¦‚L=0.1,è€Œä¸€ä¸ª0.1ç›´å¾„çš„æ’žå‡»å‘ï¼Œæœ‰ä¸€åŠæ¦‚çŽ‡æ˜¯å°äºŽLçš„
     DMPF_TDE(index)=DMPF_TDE(index)+y;
     %     p(i,index)=y;
     %     loglog(edf.DL(index),y,'r--');hold on
@@ -486,7 +507,7 @@ for i=1:n_bin
     index=find(D_fine(i)-4*sigma(i)<DR_fine&DL_fine<=D_fine(i)+4*sigma(i));
     y=1/(sqrt(2*pi)*sigma(i))*exp(-0.5*((D_fine(index)-D_fine(i))/sigma(i)).^2);
     %     y=y/sum(y.*bin_width(index))*MOPF_isfd(i);%
-    y=y*IMPF_fine(i);%²»ÄÜÍ¨¹ý³ýÒÔsum(y.*bin_width(index))À´¹éÒ»»¯£¬ÒòÎªÓÐ¿ÉÄÜÄ³Ð©Çé¿öÊÇÔÚºá×ø±ê·¶Î§ÍâµÄ£¬±ÈÈçL=0.1,¶øÒ»¸ö0.1Ö±¾¶µÄ×²»÷¿Ó£¬ÓÐÒ»°ë¸ÅÂÊÊÇÐ¡ÓÚLµÄ
+    y=y*IMPF_fine(i);%ä¸èƒ½é€šè¿‡é™¤ä»¥sum(y.*bin_width(index))æ¥å½’ä¸€åŒ–ï¼Œå› ä¸ºæœ‰å¯èƒ½æŸäº›æƒ…å†µæ˜¯åœ¨æ¨ªåæ ‡èŒƒå›´å¤–çš„ï¼Œæ¯”å¦‚L=0.1,è€Œä¸€ä¸ª0.1ç›´å¾„çš„æ’žå‡»å‘ï¼Œæœ‰ä¸€åŠæ¦‚çŽ‡æ˜¯å°äºŽLçš„
     DMPF_TDE_fine(index)=DMPF_TDE_fine(index)+y;
     %     p(i,index)=y;
     %     loglog(edf.DL(index),y,'r--');hold on
